@@ -7,6 +7,17 @@ N = int(duration / dt) #10000 samples
 np.random.seed(621)
 alpha = 0.98
 
+# Gyro model parameters
+bias = 2.0
+rw_sigma = 0.005
+gyro_noise_sigma = 0.1
+
+# Accel model parameters
+accel_noise_sigma = 1.0
+vib_sigma = 3.0
+vib_start = 8.0
+vib_end = 8.5
+
 def generate_truth(duration, dt):
     N = int(duration / dt)
     t = np.linspace(0.0, duration, N)
@@ -29,32 +40,45 @@ def generate_truth(duration, dt):
     return t, true_rate, true_angle
 
 t, true_rate, true_angle = generate_truth(duration, dt)
-plt.plot (t, true_angle)
+plt.plot(t, true_angle)
 plt.xlabel("Time (s)")
 plt.ylabel("Angle (deg)")
 plt.grid(True)
 plt.show()
-
-bias = 2.0
-rw_sigma = 0.005
-noise_sigma = 0.1
-
 
 def simulate_gyro(true_rate, bias, rw_sigma, noise_sigma):
     N = len(true_rate)
     white_noise = np.random.normal(0.0, noise_sigma, N)
     rw_steps = np.random.normal(0.0, rw_sigma, N)
     drift = np.cumsum(rw_steps)
-    gyro_measured = true_rate  + bias + drift + white_noise
+    gyro_measured = true_rate + bias + drift + white_noise
     return gyro_measured
 
-gyro_measured = simulate_gyro(true_rate, bias, rw_sigma, noise_sigma)
-
+gyro_measured = simulate_gyro(true_rate, bias, rw_sigma, gyro_noise_sigma)
 plt.figure()
 plt.plot(t, true_rate, label="true rate")
 plt.plot(t, gyro_measured, label="measured gyro", alpha=0.6)
 plt.xlabel("Time (s)")
 plt.ylabel("Rate (deg/s)")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+def simulate_accel(true_angle, t, noise_sigma, vib_start, vib_end, vib_sigma):
+    N = len(true_angle)
+    white_noise = np.random.normal(0.0, noise_sigma, N)
+    vibration_noise = np.random.normal(0.0, vib_sigma, N)
+    mask = (t >= vib_start) & (t < vib_end)
+    vibration_noise = vibration_noise * mask
+    accel_angle_measured = white_noise + vibration_noise + true_angle
+    return accel_angle_measured
+
+accel_angle_measured = simulate_accel(true_angle, t, accel_noise_sigma, vib_start, vib_end, vib_sigma)
+plt.figure()
+plt.plot(t, true_angle, label="true angle")
+plt.plot(t, accel_angle_measured, label="measured accel", alpha=0.6)
+plt.xlabel("Time (s)")
+plt.ylabel("Angle (deg)")
 plt.legend()
 plt.grid(True)
 plt.show()
