@@ -40,6 +40,7 @@ def generate_truth(duration, dt):
     return t, true_rate, true_angle
 
 t, true_rate, true_angle = generate_truth(duration, dt)
+
 plt.plot(t, true_angle)
 plt.xlabel("Time (s)")
 plt.ylabel("Angle (deg)")
@@ -55,6 +56,7 @@ def simulate_gyro(true_rate, bias, rw_sigma, noise_sigma):
     return gyro_measured
 
 gyro_measured = simulate_gyro(true_rate, bias, rw_sigma, gyro_noise_sigma)
+
 plt.figure()
 plt.plot(t, true_rate, label="true rate")
 plt.plot(t, gyro_measured, label="measured gyro", alpha=0.6)
@@ -74,11 +76,44 @@ def simulate_accel(true_angle, t, noise_sigma, vib_start, vib_end, vib_sigma):
     return accel_angle_measured
 
 accel_angle_measured = simulate_accel(true_angle, t, accel_noise_sigma, vib_start, vib_end, vib_sigma)
+
 plt.figure()
 plt.plot(t, true_angle, label="true angle")
 plt.plot(t, accel_angle_measured, label="measured accel", alpha=0.6)
 plt.xlabel("Time (s)")
 plt.ylabel("Angle (deg)")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+def estimate_gyro_only(gyro_measured, dt):
+    angle_gyro = np.cumsum(gyro_measured) * dt
+    return angle_gyro
+
+angle_gyro = estimate_gyro_only(gyro_measured, dt)
+
+plt.figure()
+plt.plot(t, true_angle, label='True angle')
+plt.plot(t, angle_gyro, label='Gyro-only estimate')
+plt.xlabel('Time (s)')
+plt.ylabel('Angle (deg)')
+plt.title('Gyro-only integration vs truth')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+def estimate_accel_only(accel_angle_measured):
+    angle_accel = accel_angle_measured
+    return angle_accel
+
+angle_accel = estimate_accel_only(accel_angle_measured)
+
+plt.figure()
+plt.plot(t, true_angle, label='True angle')
+plt.plot(t, angle_accel, label='Accel-only estimate', alpha=0.6)
+plt.xlabel('Time (s)')
+plt.ylabel('Angle (deg)')
+plt.title('Accel-only vs truth')
 plt.legend()
 plt.grid(True)
 plt.show()
