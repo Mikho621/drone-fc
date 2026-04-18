@@ -1,52 +1,49 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+#config
 dt = 0.001
 duration = 10.0
 N = int(duration / dt) #10000 samples
 np.random.seed(621)
 alpha = 0.98
 
-# Gyro model parameters
+#gyro parameters
 bias = 2.0
 rw_sigma = 0.005
 gyro_noise_sigma = 0.1
 
-# Accel model parameters
+#accel parameters
 accel_noise_sigma = 1.0
 vib_sigma = 3.0
 vib_start = 8.0
 vib_end = 8.5
 
+
+#truth
 def generate_truth(duration, dt):
     N = int(duration / dt)
     t = np.linspace(0.0, duration, N)
     
     true_rate = np.zeros(N)
-    # Phase 1 (0-2s): stationary — implicit zero
+    # Phase 1 (0-2s): stationary
     
     true_rate[(t >= 2.0) & (t < 5.0)] = 10.0
     # Phase 2 (2-5s): ramp
     
-    # Phase 3 (5-8s): stationary — implicit zero
+    # Phase 3 (5-8s): stationary
     
     true_rate[(t >= 8.0) & (t < 8.5)] = -150.0
     # Phase 4 (8-8.5s): flip
     
-    # Phase 5 (8.5-10s): stationary — implicit zero
+    # Phase 5 (8.5-10s): stationary
     
     true_angle = np.cumsum(true_rate) * dt
     
     return t, true_rate, true_angle
 
-t, true_rate, true_angle = generate_truth(duration, dt)
 
-plt.plot(t, true_angle)
-plt.xlabel("Time (s)")
-plt.ylabel("Angle (deg)")
-plt.grid(True)
-plt.show()
-
+#sensors
 def simulate_gyro(true_rate, bias, rw_sigma, noise_sigma):
     N = len(true_rate)
     white_noise = np.random.normal(0.0, noise_sigma, N)
@@ -55,16 +52,6 @@ def simulate_gyro(true_rate, bias, rw_sigma, noise_sigma):
     gyro_measured = true_rate + bias + drift + white_noise
     return gyro_measured
 
-gyro_measured = simulate_gyro(true_rate, bias, rw_sigma, gyro_noise_sigma)
-
-plt.figure()
-plt.plot(t, true_rate, label="true rate")
-plt.plot(t, gyro_measured, label="measured gyro", alpha=0.6)
-plt.xlabel("Time (s)")
-plt.ylabel("Rate (deg/s)")
-plt.legend()
-plt.grid(True)
-plt.show()
 
 def simulate_accel(true_angle, t, noise_sigma, vib_start, vib_end, vib_sigma):
     N = len(true_angle)
@@ -75,45 +62,76 @@ def simulate_accel(true_angle, t, noise_sigma, vib_start, vib_end, vib_sigma):
     accel_angle_measured = white_noise + vibration_noise + true_angle
     return accel_angle_measured
 
-accel_angle_measured = simulate_accel(true_angle, t, accel_noise_sigma, vib_start, vib_end, vib_sigma)
 
-plt.figure()
-plt.plot(t, true_angle, label="true angle")
-plt.plot(t, accel_angle_measured, label="measured accel", alpha=0.6)
-plt.xlabel("Time (s)")
-plt.ylabel("Angle (deg)")
-plt.legend()
-plt.grid(True)
-plt.show()
-
+# === Estimators ===
 def estimate_gyro_only(gyro_measured, dt):
     angle_gyro = np.cumsum(gyro_measured) * dt
     return angle_gyro
 
-angle_gyro = estimate_gyro_only(gyro_measured, dt)
-
-plt.figure()
-plt.plot(t, true_angle, label='True angle')
-plt.plot(t, angle_gyro, label='Gyro-only estimate')
-plt.xlabel('Time (s)')
-plt.ylabel('Angle (deg)')
-plt.title('Gyro-only integration vs truth')
-plt.legend()
-plt.grid(True)
-plt.show()
 
 def estimate_accel_only(accel_angle_measured):
     angle_accel = accel_angle_measured
     return angle_accel
 
-angle_accel = estimate_accel_only(accel_angle_measured)
 
-plt.figure()
-plt.plot(t, true_angle, label='True angle')
-plt.plot(t, angle_accel, label='Accel-only estimate', alpha=0.6)
-plt.xlabel('Time (s)')
-plt.ylabel('Angle (deg)')
-plt.title('Accel-only vs truth')
-plt.legend()
-plt.grid(True)
-plt.show()
+def complementary_filter(gyro_measured, accel_angle_measured, dt, alpha):
+    N = len(gyro_measured)
+    angle = np.zeros(N)
+    angle[0] = accel_angle_measured[0]
+    for i in range(1, N):
+        angle[i] = alpha * (angle[i-1] + gyro_measured[i] * dt) + (1 - alpha) * accel_angle_measured[i]
+    return angle
+
+
+#plotting
+def plot_results(t, true_angle, angle_gyro, angle_accel, angle_fused):
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    
+    #top-left: truth alone
+    axes[0, 0].plot(t, true_angle)
+    axes[0, 0].set_title("True angle")
+    axes[0, 0].set_xlabel("Time (s)")
+    axes[0, 0].set_ylabel("Angle (deg)")
+    axes[0, 0].grid(True)
+    
+    #top-right: gyro-only vs truth (drifts)
+    axes[0, 1].plot(t, true_angle, label="true angle")
+    axes[0, 1].plot(t, angle_gyro, label="gyro-only", alpha=0.7)
+    axes[0, 1].set_title("Gyro-only (drifts)")
+    axes[0, 1].set_xlabel("Time (s)")
+    axes[0, 1].set_ylabel("Angle (deg)")
+    axes[0, 1].legend()
+    axes[0, 1].grid(True)
+    
+    #bottom-left: accel-only vs truth (noisy)
+    axes[1, 0].plot(t, true_angle, label="true angle")
+    axes[1, 0].plot(t, angle_accel, label="accel-only", alpha=0.5)
+    axes[1, 0].set_title("Accel-only (noisy)")
+    axes[1, 0].set_xlabel("Time (s)")
+    axes[1, 0].set_ylabel("Angle (deg)")
+    axes[1, 0].legend()
+    axes[1, 0].grid(True)
+    
+    #bottom-right: fused vs truth (the goal)
+    axes[1, 1].plot(t, true_angle, label="true angle", linewidth=2)
+    axes[1, 1].plot(t, angle_fused, label="fused", linewidth=2)
+    axes[1, 1].set_title("Complementary filter (the goal)")
+    axes[1, 1].set_xlabel("Time (s)")
+    axes[1, 1].set_ylabel("Angle (deg)")
+    axes[1, 1].legend()
+    axes[1, 1].grid(True)
+    
+    plt.tight_layout()
+    plt.show()
+
+
+#main 
+t, true_rate, true_angle = generate_truth(duration, dt)
+gyro_measured = simulate_gyro(true_rate, bias, rw_sigma, gyro_noise_sigma)
+accel_angle_measured = simulate_accel(true_angle, t, accel_noise_sigma, vib_start, vib_end, vib_sigma)
+
+angle_gyro = estimate_gyro_only(gyro_measured, dt)
+angle_accel = estimate_accel_only(accel_angle_measured)
+angle_fused = complementary_filter(gyro_measured, accel_angle_measured, dt, alpha)
+
+plot_results(t, true_angle, angle_gyro, angle_accel, angle_fused)
